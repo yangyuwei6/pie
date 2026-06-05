@@ -1,0 +1,10 @@
+.env
+.env.*
+*.exe
+*.test
+coverage.out
+.gocache/
+.gomodcache/
+.gopath/
+tmp/
+dist/

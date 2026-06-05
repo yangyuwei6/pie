@@ -1,0 +1,34 @@
+http:
+  addr: ":8080"
+
+mysql:
+  dsn: "root:123456@tcp(127.0.0.1:3306)/pie?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+elasticsearch:
+  url: "http://localhost:9200"
+
+minio:
+  endpoint: "localhost:9000"
+  bucket: "pie"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+
+kafka:
+  brokers:
+    - "localhost:9092"
+
+ai:
+  llm_base_url: ""
+  llm_api_key: ""
+  embedding_base_url: ""
+  embedding_api_key: ""
+  tika_url: "http://localhost:9998"
+
+jwt:
+  secret: "change-this-secret"
+  expire_hours: 24
