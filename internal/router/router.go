@@ -1,12 +1,13 @@
 package router
 
 import (
-	"pie/internal/handler"
+	uploadhandler "pie/internal/handler/upload"
+	userhandler "pie/internal/handler/user"
 
 	"github.com/gin-gonic/gin"
 )
 
-func Register(r *gin.Engine, userHandler *handler.UserHandler, uploadHandler *handler.UploadHandler, jwtMiddleware gin.HandlerFunc) {
+func Register(r *gin.Engine, userHandler *userhandler.Handler, uploadHandler *uploadhandler.Handler, jwtMiddleware gin.HandlerFunc) {
 	api := r.Group("/api/v1")
 
 	auth := api.Group("/auth")
@@ -33,5 +34,6 @@ func Register(r *gin.Engine, userHandler *handler.UserHandler, uploadHandler *ha
 	upload.Use(jwtMiddleware)
 	{
 		upload.POST("/check", uploadHandler.CheckFile)
+		upload.POST("/chunk", uploadHandler.UploadChunk)
 	}
 }

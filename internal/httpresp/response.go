@@ -1,4 +1,4 @@
-package handler
+package httpresp
 
 import (
 	"net/http"

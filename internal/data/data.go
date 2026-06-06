@@ -7,14 +7,18 @@ import (
 	"pie/internal/config"
 	"pie/internal/data/query"
 
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
 type Data struct {
-	q   *query.Query
-	rdb *redis.Client
+	q           *query.Query
+	rdb         *redis.Client
+	minioClient *minio.Client
+	minioBucket string
 }
 
 func NewDB(cfg config.MySQLConfig) (*gorm.DB, error) {
@@ -39,9 +43,33 @@ func NewRedis(cfg config.RedisConfig) (*redis.Client, error) {
 	return rdb, nil
 }
 
-func NewData(db *gorm.DB, rdb *redis.Client) *Data {
+func NewMinIO(cfg config.ObjectStoreConfig) (*minio.Client, error) {
+	client, err := minio.New(cfg.Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Secure: false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("connect minio failed: %w", err)
+	}
+
+	exists, err := client.BucketExists(context.Background(), cfg.Bucket)
+	if err != nil {
+		return nil, fmt.Errorf("check minio bucket failed: %w", err)
+	}
+	if !exists {
+		if err := client.MakeBucket(context.Background(), cfg.Bucket, minio.MakeBucketOptions{}); err != nil {
+			return nil, fmt.Errorf("create minio bucket failed: %w", err)
+		}
+	}
+
+	return client, nil
+}
+
+func NewData(db *gorm.DB, rdb *redis.Client, minioClient *minio.Client, minioBucket string) *Data {
 	return &Data{
-		q:   query.Use(db),
-		rdb: rdb,
+		q:           query.Use(db),
+		rdb:         rdb,
+		minioClient: minioClient,
+		minioBucket: minioBucket,
 	}
 }

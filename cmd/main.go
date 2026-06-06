@@ -4,7 +4,8 @@ import (
 	"pie/internal/auth"
 	"pie/internal/config"
 	"pie/internal/data"
-	"pie/internal/handler"
+	uploadhandler "pie/internal/handler/upload"
+	userhandler "pie/internal/handler/user"
 	"pie/internal/log"
 	"pie/internal/middleware"
 	"pie/internal/router"
@@ -44,16 +45,21 @@ func main() {
 	}
 	defer rdb.Close()
 
-	dataStore := data.NewData(db, rdb)
+	minioClient, err := data.NewMinIO(cfg.ObjectStore)
+	if err != nil {
+		logger.Fatal("init minio failed", zap.Error(err))
+	}
+
+	dataStore := data.NewData(db, rdb, minioClient, cfg.ObjectStore.Bucket)
 	userRepo := data.NewUserRepo(dataStore)
 	tokenRepo := data.NewTokenRepo(dataStore)
 	orgTagRepo := data.NewOrgTagRepo(dataStore)
 	uploadRepo := data.NewUploadRepo(dataStore)
 	jwtManager := auth.NewJWTManager(cfg.JWT)
 	userService := service.NewUserService(userRepo, tokenRepo, orgTagRepo, jwtManager, logger)
-	uploadService := service.NewUploadService(uploadRepo, logger)
-	userHandler := handler.NewUserHandler(userService, logger)
-	uploadHandler := handler.NewUploadHandler(uploadService, logger)
+	uploadService := service.NewUploadService(uploadRepo, userRepo, logger)
+	userHandler := userhandler.NewHandler(userService, logger)
+	uploadHandler := uploadhandler.NewHandler(uploadService, logger)
 	jwtMiddleware := middleware.JWT(jwtManager, userService)
 	router.Register(r, userHandler, uploadHandler, jwtMiddleware)
 

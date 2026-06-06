@@ -22,4 +22,6 @@ var (
 	ErrUserNotFound        = NewError(10003, "user not found")
 	ErrInvalidRefreshToken = NewError(10004, "invalid refresh token")
 	ErrOrgTagNotBelong     = NewError(10005, "user does not belong to this organization")
+	ErrUnsupportedFileType = NewError(20001, "unsupported file type")
+	ErrInvalidUploadChunk  = NewError(20002, "invalid upload chunk")
 )
