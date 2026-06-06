@@ -83,13 +83,41 @@ func (h *Handler) UploadChunk(c *gin.Context) {
 		req.FileMD5,
 		req.FileName,
 		req.TotalSize,
-		req.ChunkIndex,
+		*req.ChunkIndex,
 		file,
 		header.Size,
 		id,
 		req.OrgTag,
 		req.IsPublic,
 	)
+	if err != nil {
+		httpresp.Fail(c, err)
+		return
+	}
+
+	httpresp.OK(c, result)
+}
+
+func (h *Handler) MergeChunks(c *gin.Context) {
+	userID, ok := c.Get("user_id")
+	if !ok {
+		httpresp.Unauthorized(c, "missing user context")
+		return
+	}
+
+	id, ok := userID.(int64)
+	if !ok {
+		httpresp.Unauthorized(c, "invalid user context")
+		return
+	}
+
+	var req MergeChunksRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpresp.BadRequest(c, "invalid request")
+		return
+	}
+
+	result, err := h.uploadService.MergeChunks(c.Request.Context(), req.FileMD5, req.FileName, id)
 	if err != nil {
 		httpresp.Fail(c, err)
 		return

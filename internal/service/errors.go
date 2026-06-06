@@ -24,4 +24,6 @@ var (
 	ErrOrgTagNotBelong     = NewError(10005, "user does not belong to this organization")
 	ErrUnsupportedFileType = NewError(20001, "unsupported file type")
 	ErrInvalidUploadChunk  = NewError(20002, "invalid upload chunk")
+	ErrUploadNotFound      = NewError(20003, "upload record not found")
+	ErrUploadNotCompleted  = NewError(20004, "upload chunks not completed")
 )

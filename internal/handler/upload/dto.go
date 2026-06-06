@@ -8,7 +8,12 @@ type UploadChunkRequest struct {
 	FileMD5    string `form:"fileMd5" binding:"required"`
 	FileName   string `form:"fileName" binding:"required"`
 	TotalSize  int64  `form:"totalSize" binding:"required"`
-	ChunkIndex int    `form:"chunkIndex" binding:"required"`
+	ChunkIndex *int   `form:"chunkIndex" binding:"required"`
 	OrgTag     string `form:"orgTag"`
 	IsPublic   bool   `form:"isPublic"`
+}
+
+type MergeChunksRequest struct {
+	FileMD5  string `json:"fileMd5" binding:"required"`
+	FileName string `json:"fileName" binding:"required"`
 }

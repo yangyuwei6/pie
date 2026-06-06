@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"io"
+	"time"
 
 	"pie/internal/data/model"
 )
@@ -15,4 +16,8 @@ type UploadRepo interface {
 	MarkChunkUploaded(ctx context.Context, fileMD5 string, userID string, chunkIndex int) error
 	GetUploadedChunks(ctx context.Context, fileMD5 string, userID string, totalChunks int) ([]int, error)
 	SaveChunk(ctx context.Context, objectName string, reader io.Reader, size int64) error
+	MergeChunks(ctx context.Context, sourceObjects []string, destObject string) error
+	GetPresignedURL(ctx context.Context, objectName string, expiry time.Duration) (string, error)
+	UpdateFileUploadStatus(ctx context.Context, recordID int64, status int32) error
+	DeleteUploadMark(ctx context.Context, fileMD5 string, userID string) error
 }

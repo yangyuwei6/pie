@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"pie/internal/data/model"
 
@@ -76,6 +77,56 @@ func (r *UploadRepo) GetUploadedChunks(ctx context.Context, fileMD5 string, user
 func (r *UploadRepo) SaveChunk(ctx context.Context, objectName string, reader io.Reader, size int64) error {
 	_, err := r.data.minioClient.PutObject(ctx, r.data.minioBucket, objectName, reader, size, minio.PutObjectOptions{})
 	return err
+}
+
+func (r *UploadRepo) MergeChunks(ctx context.Context, sourceObjects []string, destObject string) error {
+	if len(sourceObjects) == 0 {
+		return fmt.Errorf("source objects is empty")
+	}
+
+	dst := minio.CopyDestOptions{
+		Bucket: r.data.minioBucket,
+		Object: destObject,
+	}
+
+	if len(sourceObjects) == 1 {
+		src := minio.CopySrcOptions{
+			Bucket: r.data.minioBucket,
+			Object: sourceObjects[0],
+		}
+		_, err := r.data.minioClient.CopyObject(ctx, dst, src)
+		return err
+	}
+
+	srcs := make([]minio.CopySrcOptions, 0, len(sourceObjects))
+	for _, objectName := range sourceObjects {
+		srcs = append(srcs, minio.CopySrcOptions{
+			Bucket: r.data.minioBucket,
+			Object: objectName,
+		})
+	}
+
+	_, err := r.data.minioClient.ComposeObject(ctx, dst, srcs...)
+	return err
+}
+
+func (r *UploadRepo) GetPresignedURL(ctx context.Context, objectName string, expiry time.Duration) (string, error) {
+	u, err := r.data.minioClient.PresignedGetObject(ctx, r.data.minioBucket, objectName, expiry, nil)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+func (r *UploadRepo) UpdateFileUploadStatus(ctx context.Context, recordID int64, status int32) error {
+	f := r.data.q.FileUpload
+	_, err := f.WithContext(ctx).Where(f.ID.Eq(recordID)).Update(f.Status, status)
+	return err
+}
+
+func (r *UploadRepo) DeleteUploadMark(ctx context.Context, fileMD5 string, userID string) error {
+	key := uploadKey(userID, fileMD5)
+	return r.data.rdb.Del(ctx, key).Err()
 }
 
 func uploadKey(userID string, fileMD5 string) string {

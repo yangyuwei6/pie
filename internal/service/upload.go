@@ -8,8 +8,10 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"pie/internal/data/model"
+	"pie/internal/messaging/message"
 	"pie/internal/repo"
 
 	"go.uber.org/zap"
@@ -21,7 +23,12 @@ const defaultChunkSize = 5 * 1024 * 1024
 type UploadService struct {
 	uploadRepo repo.UploadRepo
 	userRepo   repo.UserRepo
+	producer   FileTaskProducer
 	logger     *zap.Logger
+}
+
+type FileTaskProducer interface {
+	ProduceFileTask(ctx context.Context, msg message.FileProcessing) error
 }
 
 type CheckFileResult struct {
@@ -34,10 +41,15 @@ type UploadChunkResult struct {
 	Progress float64 `json:"progress"`
 }
 
-func NewUploadService(uploadRepo repo.UploadRepo, userRepo repo.UserRepo, logger *zap.Logger) *UploadService {
+type MergeChunksResult struct {
+	ObjectURL string `json:"objectUrl"`
+}
+
+func NewUploadService(uploadRepo repo.UploadRepo, userRepo repo.UserRepo, producer FileTaskProducer, logger *zap.Logger) *UploadService {
 	return &UploadService{
 		uploadRepo: uploadRepo,
 		userRepo:   userRepo,
+		producer:   producer,
 		logger:     logger,
 	}
 }
@@ -194,6 +206,120 @@ func (s *UploadService) UploadChunk(ctx context.Context, fileMD5, fileName strin
 	return &UploadChunkResult{
 		Uploaded: uploadedChunks,
 		Progress: calculateProgress(uploadedChunks, totalChunks),
+	}, nil
+}
+
+func (s *UploadService) MergeChunks(ctx context.Context, fileMD5, fileName string, userID int64) (*MergeChunksResult, error) {
+	userIDString := strconv.FormatInt(userID, 10)
+
+	record, err := s.uploadRepo.GetFileUploadRecord(ctx, fileMD5, userIDString)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.logger.Warn("merge chunks failed: upload record not found",
+				zap.String("file_md5", fileMD5),
+				zap.Int64("user_id", userID),
+			)
+			return nil, ErrUploadNotFound
+		}
+		s.logger.Error("merge chunks failed: get file upload record failed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	totalChunks := calculateTotalChunks(record.TotalSize)
+	uploadedChunks, err := s.uploadRepo.GetUploadedChunks(ctx, fileMD5, userIDString, totalChunks)
+	if err != nil {
+		s.logger.Error("merge chunks failed: get uploaded chunks failed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+	if len(uploadedChunks) < totalChunks {
+		s.logger.Warn("merge chunks failed: upload chunks not completed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.Int("uploaded_chunks", len(uploadedChunks)),
+			zap.Int("total_chunks", totalChunks),
+		)
+		return nil, ErrUploadNotCompleted
+	}
+
+	sourceObjects := make([]string, 0, totalChunks)
+	for i := 0; i < totalChunks; i++ {
+		sourceObjects = append(sourceObjects, fmt.Sprintf("chunks/%s/%d", fileMD5, i))
+	}
+	destObject := fmt.Sprintf("merged/%s", fileName)
+	if err := s.uploadRepo.MergeChunks(ctx, sourceObjects, destObject); err != nil {
+		s.logger.Error("merge chunks failed: merge objects failed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.String("dest_object", destObject),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	if err := s.uploadRepo.UpdateFileUploadStatus(ctx, record.ID, 1); err != nil {
+		s.logger.Error("merge chunks failed: update upload status failed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.Int64("record_id", record.ID),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	objectURL, err := s.uploadRepo.GetPresignedURL(ctx, destObject, time.Hour)
+	if err != nil {
+		s.logger.Error("merge chunks failed: get presigned url failed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.String("dest_object", destObject),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	if s.producer != nil {
+		if err := s.producer.ProduceFileTask(ctx, message.FileProcessing{
+			FileMD5:   fileMD5,
+			ObjectURL: objectURL,
+			FileName:  fileName,
+			UserID:    userID,
+			OrgTag:    stringValue(record.OrgTag),
+			IsPublic:  record.IsPublic,
+		}); err != nil {
+			s.logger.Error("merge chunks failed: produce file processing task failed",
+				zap.String("file_md5", fileMD5),
+				zap.Int64("user_id", userID),
+				zap.Error(err),
+			)
+			return nil, err
+		}
+	}
+
+	if err := s.uploadRepo.DeleteUploadMark(ctx, fileMD5, userIDString); err != nil {
+		s.logger.Error("merge chunks failed: delete upload mark failed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	s.logger.Info("merge chunks success",
+		zap.String("file_md5", fileMD5),
+		zap.Int64("user_id", userID),
+		zap.String("dest_object", destObject),
+	)
+
+	return &MergeChunksResult{
+		ObjectURL: objectURL,
 	}, nil
 }
 

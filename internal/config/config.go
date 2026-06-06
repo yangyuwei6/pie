@@ -47,6 +47,7 @@ type ObjectStoreConfig struct {
 
 type MessagingConfig struct {
 	KafkaBrokers []string `yaml:"brokers"`
+	Topic        string   `yaml:"topic"`
 }
 
 type JWTConfig struct {
@@ -96,5 +97,8 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.JWT.RefreshExpireHours == 0 {
 		cfg.JWT.RefreshExpireHours = 24 * 7
+	}
+	if cfg.Messaging.Topic == "" {
+		cfg.Messaging.Topic = "file-processing"
 	}
 }

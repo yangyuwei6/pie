@@ -21,6 +21,7 @@ minio:
 kafka:
   brokers:
     - "localhost:9092"
+  topic: "file-processing"
 
 ai:
   llm_base_url: ""

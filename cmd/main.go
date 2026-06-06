@@ -7,6 +7,7 @@ import (
 	uploadhandler "pie/internal/handler/upload"
 	userhandler "pie/internal/handler/user"
 	"pie/internal/log"
+	kafkamessaging "pie/internal/messaging/kafka"
 	"pie/internal/middleware"
 	"pie/internal/router"
 	"pie/internal/service"
@@ -51,13 +52,16 @@ func main() {
 	}
 
 	dataStore := data.NewData(db, rdb, minioClient, cfg.ObjectStore.Bucket)
+	fileTaskProducer := kafkamessaging.NewProducer(cfg.Messaging)
+	defer fileTaskProducer.Close()
+
 	userRepo := data.NewUserRepo(dataStore)
 	tokenRepo := data.NewTokenRepo(dataStore)
 	orgTagRepo := data.NewOrgTagRepo(dataStore)
 	uploadRepo := data.NewUploadRepo(dataStore)
 	jwtManager := auth.NewJWTManager(cfg.JWT)
 	userService := service.NewUserService(userRepo, tokenRepo, orgTagRepo, jwtManager, logger)
-	uploadService := service.NewUploadService(uploadRepo, userRepo, logger)
+	uploadService := service.NewUploadService(uploadRepo, userRepo, fileTaskProducer, logger)
 	userHandler := userhandler.NewHandler(userService, logger)
 	uploadHandler := uploadhandler.NewHandler(uploadService, logger)
 	jwtMiddleware := middleware.JWT(jwtManager, userService)
