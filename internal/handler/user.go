@@ -38,6 +38,10 @@ type LogoutRequest struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
+type SetPrimaryOrgRequest struct {
+	PrimaryOrg string `json:"primaryOrg" binding:"required"`
+}
+
 type UserResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -182,6 +186,33 @@ func (h *UserHandler) GetUserOrgTags(c *gin.Context) {
 	}
 
 	OK(c, orgTags)
+}
+
+func (h *UserHandler) SetPrimaryOrg(c *gin.Context) {
+	userID, ok := c.Get("user_id")
+	if !ok {
+		Unauthorized(c, "missing user context")
+		return
+	}
+
+	id, ok := userID.(int64)
+	if !ok {
+		Unauthorized(c, "invalid user context")
+		return
+	}
+
+	var req SetPrimaryOrgRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, "invalid request")
+		return
+	}
+
+	if err := h.userService.SetPrimaryOrg(c.Request.Context(), id, req.PrimaryOrg); err != nil {
+		Fail(c, err)
+		return
+	}
+
+	OK(c, nil)
 }
 
 func toUserResponse(user *model.User) UserResponse {

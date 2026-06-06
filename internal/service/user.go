@@ -211,6 +211,24 @@ func (s *UserService) GetUserOrgTags(ctx context.Context, userID int64) (*UserOr
 	}, nil
 }
 
+func (s *UserService) SetPrimaryOrg(ctx context.Context, userID int64, primaryOrg string) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserNotFound
+		}
+		return err
+	}
+
+	orgTags := splitOrgTags(user.OrgTags)
+	if !containsString(orgTags, primaryOrg) {
+		return ErrOrgTagNotBelong
+	}
+
+	user.PrimaryOrg = &primaryOrg
+	return s.userRepo.Update(ctx, user)
+}
+
 func (s *UserService) GetUserByUsername(ctx context.Context, username string) (*model.User, error) {
 	return s.userRepo.FindByUsername(ctx, username)
 }
@@ -260,4 +278,13 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
