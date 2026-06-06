@@ -2,9 +2,9 @@ package main
 
 import (
 	"pie/internal/auth"
-	"pie/internal/biz"
 	"pie/internal/config"
 	"pie/internal/data"
+	"pie/internal/handler"
 	"pie/internal/log"
 	"pie/internal/middleware"
 	"pie/internal/router"
@@ -49,11 +49,10 @@ func main() {
 	tokenRepo := data.NewTokenRepo(dataStore)
 	orgTagRepo := data.NewOrgTagRepo(dataStore)
 	jwtManager := auth.NewJWTManager(cfg.JWT)
-	orgTagBiz := biz.NewOrgTagUsecase(orgTagRepo)
-	userBiz := biz.NewUserUsecase(userRepo, tokenRepo, orgTagBiz, jwtManager, logger)
-	userService := service.NewUserService(userBiz, logger)
-	jwtMiddleware := middleware.JWT(jwtManager, userBiz)
-	router.Register(r, userService, jwtMiddleware)
+	userService := service.NewUserService(userRepo, tokenRepo, orgTagRepo, jwtManager, logger)
+	userHandler := handler.NewUserHandler(userService, logger)
+	jwtMiddleware := middleware.JWT(jwtManager, userService)
+	router.Register(r, userHandler, jwtMiddleware)
 
 	if err := r.Run(cfg.HTTP.Addr); err != nil {
 		logger.Fatal("failed to run server", zap.Error(err))

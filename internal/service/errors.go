@@ -1,4 +1,4 @@
-package biz
+package service
 
 type Error struct {
 	Code    int

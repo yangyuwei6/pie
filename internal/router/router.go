@@ -1,29 +1,29 @@
 package router
 
 import (
-	"pie/internal/service"
+	"pie/internal/handler"
 
 	"github.com/gin-gonic/gin"
 )
 
-func Register(r *gin.Engine, userService *service.UserService, jwtMiddleware gin.HandlerFunc) {
+func Register(r *gin.Engine, userHandler *handler.UserHandler, jwtMiddleware gin.HandlerFunc) {
 	api := r.Group("/api/v1")
 
 	auth := api.Group("/auth")
 	{
-		auth.POST("/refreshToken", userService.RefreshToken)
+		auth.POST("/refreshToken", userHandler.RefreshToken)
 	}
 
 	users := api.Group("/users")
 	{
-		users.POST("/register", userService.Register)
-		users.POST("/login", userService.Login)
+		users.POST("/register", userHandler.Register)
+		users.POST("/login", userHandler.Login)
 
 		authed := users.Group("/")
 		authed.Use(jwtMiddleware)
 		{
-			authed.GET("/me", userService.Me)
-			authed.POST("/logout", userService.Logout)
+			authed.GET("/me", userHandler.Me)
+			authed.POST("/logout", userHandler.Logout)
 		}
 	}
 }

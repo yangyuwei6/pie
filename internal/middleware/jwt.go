@@ -5,12 +5,12 @@ import (
 	"strings"
 
 	"pie/internal/auth"
-	"pie/internal/biz"
+	"pie/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
-func JWT(manager *auth.JWTManager, userBiz *biz.UserUsecase) gin.HandlerFunc {
+func JWT(manager *auth.JWTManager, userService *service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
@@ -28,7 +28,7 @@ func JWT(manager *auth.JWTManager, userBiz *biz.UserUsecase) gin.HandlerFunc {
 			return
 		}
 
-		blacklisted, err := userBiz.IsTokenBlacklisted(c.Request.Context(), tokenString)
+		blacklisted, err := userService.IsTokenBlacklisted(c.Request.Context(), tokenString)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"message": "check token failed",

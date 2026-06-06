@@ -1,9 +1,9 @@
-package service
+package handler
 
 import (
 	"net/http"
 
-	"pie/internal/biz"
+	"pie/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,7 +44,7 @@ func Unauthorized(c *gin.Context, message string) {
 }
 
 func Fail(c *gin.Context, err error) {
-	if e, ok := err.(*biz.Error); ok {
+	if e, ok := err.(*service.Error); ok {
 		c.JSON(http.StatusOK, Response{
 			Code:    e.Code,
 			Message: e.Message,
