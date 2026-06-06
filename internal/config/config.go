@@ -50,8 +50,9 @@ type MessagingConfig struct {
 }
 
 type JWTConfig struct {
-	Secret      string `yaml:"secret"`
-	ExpireHours int    `yaml:"expire_hours"`
+	Secret             string `yaml:"secret"`
+	ExpireHours        int    `yaml:"expire_hours"`
+	RefreshExpireHours int    `yaml:"refresh_expire_hours"`
 }
 
 type AIConfig struct {
@@ -89,5 +90,11 @@ func LoadFile(path string) (Config, error) {
 func setDefaults(cfg *Config) {
 	if cfg.HTTP.Addr == "" {
 		cfg.HTTP.Addr = ":8080"
+	}
+	if cfg.JWT.ExpireHours == 0 {
+		cfg.JWT.ExpireHours = 24
+	}
+	if cfg.JWT.RefreshExpireHours == 0 {
+		cfg.JWT.RefreshExpireHours = 24 * 7
 	}
 }

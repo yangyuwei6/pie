@@ -30,6 +30,10 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refreshToken" binding:"required"`
+}
+
 type UserResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -37,8 +41,9 @@ type UserResponse struct {
 }
 
 type LoginResponse struct {
-	Token string       `json:"token"`
-	User  UserResponse `json:"user"`
+	Token        string       `json:"token"`
+	RefreshToken string       `json:"refreshToken"`
+	User         UserResponse `json:"user"`
 }
 
 func (s *UserService) Register(c *gin.Context) {
@@ -64,7 +69,7 @@ func (s *UserService) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := s.userBiz.Login(c.Request.Context(), req.Username, req.Password)
+	token, refreshToken, err := s.userBiz.Login(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
 		Fail(c, err)
 		return
@@ -77,8 +82,28 @@ func (s *UserService) Login(c *gin.Context) {
 	}
 
 	OK(c, LoginResponse{
-		Token: token,
-		User:  toUserResponse(user),
+		Token:        token,
+		RefreshToken: refreshToken,
+		User:         toUserResponse(user),
+	})
+}
+
+func (s *UserService) RefreshToken(c *gin.Context) {
+	var req RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, "invalid request")
+		return
+	}
+
+	token, refreshToken, err := s.userBiz.RefreshToken(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		Fail(c, err)
+		return
+	}
+
+	OK(c, gin.H{
+		"token":        token,
+		"refreshToken": refreshToken,
 	})
 }
 

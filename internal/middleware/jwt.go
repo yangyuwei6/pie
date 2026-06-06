@@ -27,7 +27,7 @@ func JWT(manager *auth.JWTManager) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := manager.VerifyToken(tokenString)
+		claims, err := manager.VerifyAccessToken(tokenString)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"message": "invalid token",

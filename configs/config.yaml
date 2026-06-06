@@ -32,3 +32,4 @@ ai:
 jwt:
   secret: "change-this-secret"
   expire_hours: 24
+  refresh_expire_hours: 168

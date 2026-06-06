@@ -60,25 +60,57 @@ func (u *UserUsecase) Register(ctx context.Context, username, password string) (
 	return user, nil
 }
 
-func (u *UserUsecase) Login(ctx context.Context, username, password string) (string, error) {
+func (u *UserUsecase) Login(ctx context.Context, username, password string) (string, string, error) {
 	user, err := u.userRepo.FindByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", ErrInvalidCredentials
+			return "", "", ErrInvalidCredentials
 		}
-		return "", err
+		return "", "", err
 	}
 
 	if !auth.CheckPasswordHash(password, user.Password) {
-		return "", ErrInvalidCredentials
+		return "", "", ErrInvalidCredentials
 	}
 
-	token, err := u.jwtManager.GenerateToken(user.ID, user.Username, user.Role)
+	token, err := u.jwtManager.GenerateAccessToken(user.ID, user.Username, user.Role)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return token, nil
+	refreshToken, err := u.jwtManager.GenerateRefreshToken(user.ID, user.Username, user.Role)
+	if err != nil {
+		return "", "", err
+	}
+
+	return token, refreshToken, nil
+}
+
+func (u *UserUsecase) RefreshToken(ctx context.Context, refreshToken string) (string, string, error) {
+	claims, err := u.jwtManager.VerifyRefreshToken(refreshToken)
+	if err != nil {
+		return "", "", ErrInvalidRefreshToken
+	}
+
+	user, err := u.userRepo.FindByID(ctx, claims.UserID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", "", ErrInvalidRefreshToken
+		}
+		return "", "", err
+	}
+
+	newToken, err := u.jwtManager.GenerateAccessToken(user.ID, user.Username, user.Role)
+	if err != nil {
+		return "", "", err
+	}
+
+	newRefreshToken, err := u.jwtManager.GenerateRefreshToken(user.ID, user.Username, user.Role)
+	if err != nil {
+		return "", "", err
+	}
+
+	return newToken, newRefreshToken, nil
 }
 
 func (u *UserUsecase) Me(ctx context.Context, userID int64) (*model.User, error) {

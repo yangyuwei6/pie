@@ -17,7 +17,8 @@ func NewError(code int, message string) *Error {
 }
 
 var (
-	ErrUserAlreadyExists  = NewError(10001, "user already exists")
-	ErrInvalidCredentials = NewError(10002, "invalid credentials")
-	ErrUserNotFound       = NewError(10003, "user not found")
+	ErrUserAlreadyExists   = NewError(10001, "user already exists")
+	ErrInvalidCredentials  = NewError(10002, "invalid credentials")
+	ErrUserNotFound        = NewError(10003, "user not found")
+	ErrInvalidRefreshToken = NewError(10004, "invalid refresh token")
 )

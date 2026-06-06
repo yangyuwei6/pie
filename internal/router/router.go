@@ -8,6 +8,12 @@ import (
 
 func Register(r *gin.Engine, userService *service.UserService, jwtMiddleware gin.HandlerFunc) {
 	api := r.Group("/api/v1")
+
+	auth := api.Group("/auth")
+	{
+		auth.POST("/refreshToken", userService.RefreshToken)
+	}
+
 	users := api.Group("/users")
 	{
 		users.POST("/register", userService.Register)
