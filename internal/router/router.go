@@ -23,6 +23,7 @@ func Register(r *gin.Engine, userService *service.UserService, jwtMiddleware gin
 		authed.Use(jwtMiddleware)
 		{
 			authed.GET("/me", userService.Me)
+			authed.POST("/logout", userService.Logout)
 		}
 	}
 }

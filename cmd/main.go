@@ -38,12 +38,19 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	dataStore := data.NewData(db)
+	rdb, err := data.NewRedis(cfg.Redis)
+	if err != nil {
+		logger.Fatal("init redis failed", zap.Error(err))
+	}
+	defer rdb.Close()
+
+	dataStore := data.NewData(db, rdb)
 	userRepo := data.NewUserRepo(dataStore, logger)
+	tokenRepo := data.NewTokenRepo(dataStore)
 	jwtManager := auth.NewJWTManager(cfg.JWT)
-	userBiz := biz.NewUserUsecase(userRepo, jwtManager, logger)
+	userBiz := biz.NewUserUsecase(userRepo, tokenRepo, jwtManager, logger)
 	userService := service.NewUserService(userBiz, logger)
-	jwtMiddleware := middleware.JWT(jwtManager)
+	jwtMiddleware := middleware.JWT(jwtManager, userBiz)
 	router.Register(r, userService, jwtMiddleware)
 
 	if err := r.Run(cfg.HTTP.Addr); err != nil {

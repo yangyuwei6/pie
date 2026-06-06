@@ -3,6 +3,7 @@ package biz
 import (
 	"context"
 	"errors"
+	"time"
 
 	"pie/internal/auth"
 	"pie/internal/data/model"
@@ -20,15 +21,22 @@ type UserRepo interface {
 	FindWithPagination(ctx context.Context, offset, limit int) ([]*model.User, int64, error)
 }
 
+type TokenRepo interface {
+	Blacklist(ctx context.Context, token string, ttl time.Duration) error
+	IsBlacklisted(ctx context.Context, token string) (bool, error)
+}
+
 type UserUsecase struct {
 	userRepo   UserRepo
+	tokenRepo  TokenRepo
 	jwtManager *auth.JWTManager
 	logger     *zap.Logger
 }
 
-func NewUserUsecase(repo UserRepo, jwtManager *auth.JWTManager, logger *zap.Logger) *UserUsecase {
+func NewUserUsecase(userRepo UserRepo, tokenRepo TokenRepo, jwtManager *auth.JWTManager, logger *zap.Logger) *UserUsecase {
 	return &UserUsecase{
-		userRepo:   repo,
+		userRepo:   userRepo,
+		tokenRepo:  tokenRepo,
 		jwtManager: jwtManager,
 		logger:     logger,
 	}
@@ -87,6 +95,14 @@ func (u *UserUsecase) Login(ctx context.Context, username, password string) (str
 }
 
 func (u *UserUsecase) RefreshToken(ctx context.Context, refreshToken string) (string, string, error) {
+	blacklisted, err := u.tokenRepo.IsBlacklisted(ctx, refreshToken)
+	if err != nil {
+		return "", "", err
+	}
+	if blacklisted {
+		return "", "", ErrInvalidRefreshToken
+	}
+
 	claims, err := u.jwtManager.VerifyRefreshToken(refreshToken)
 	if err != nil {
 		return "", "", ErrInvalidRefreshToken
@@ -111,6 +127,32 @@ func (u *UserUsecase) RefreshToken(ctx context.Context, refreshToken string) (st
 	}
 
 	return newToken, newRefreshToken, nil
+}
+
+func (u *UserUsecase) Logout(ctx context.Context, accessToken, refreshToken string) error {
+	claims, err := u.jwtManager.VerifyAccessToken(accessToken)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+
+	if err := u.tokenRepo.Blacklist(ctx, accessToken, auth.TokenTTL(claims)); err != nil {
+		return err
+	}
+
+	if refreshToken == "" {
+		return nil
+	}
+
+	refreshClaims, err := u.jwtManager.VerifyRefreshToken(refreshToken)
+	if err != nil {
+		return ErrInvalidRefreshToken
+	}
+
+	return u.tokenRepo.Blacklist(ctx, refreshToken, auth.TokenTTL(refreshClaims))
+}
+
+func (u *UserUsecase) IsTokenBlacklisted(ctx context.Context, token string) (bool, error) {
+	return u.tokenRepo.IsBlacklisted(ctx, token)
 }
 
 func (u *UserUsecase) Me(ctx context.Context, userID int64) (*model.User, error) {

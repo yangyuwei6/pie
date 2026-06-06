@@ -34,6 +34,10 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refreshToken" binding:"required"`
 }
 
+type LogoutRequest struct {
+	RefreshToken string `json:"refreshToken"`
+}
+
 type UserResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -105,6 +109,35 @@ func (s *UserService) RefreshToken(c *gin.Context) {
 		"token":        token,
 		"refreshToken": refreshToken,
 	})
+}
+
+func (s *UserService) Logout(c *gin.Context) {
+	accessToken, ok := c.Get("access_token")
+	if !ok {
+		Unauthorized(c, "missing user token")
+		return
+	}
+
+	token, ok := accessToken.(string)
+	if !ok || token == "" {
+		Unauthorized(c, "invalid user token")
+		return
+	}
+
+	var req LogoutRequest
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			BadRequest(c, "invalid request")
+			return
+		}
+	}
+
+	if err := s.userBiz.Logout(c.Request.Context(), token, req.RefreshToken); err != nil {
+		Fail(c, err)
+		return
+	}
+
+	OK(c, nil)
 }
 
 func (s *UserService) Me(c *gin.Context) {

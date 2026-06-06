@@ -99,3 +99,10 @@ func (m *JWTManager) VerifyRefreshToken(tokenStr string) (*Claims, error) {
 
 	return claims, nil
 }
+
+func TokenTTL(claims *Claims) time.Duration {
+	if claims == nil || claims.ExpiresAt == nil {
+		return 0
+	}
+	return time.Until(claims.ExpiresAt.Time)
+}
