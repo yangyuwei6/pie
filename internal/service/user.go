@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"pie/internal/auth"
 	"pie/internal/data/model"
@@ -18,6 +19,18 @@ type UserService struct {
 	orgTagRepo repo.OrgTagRepo
 	jwtManager *auth.JWTManager
 	logger     *zap.Logger
+}
+
+type OrgTagDetail struct {
+	TagID       string `json:"tagId"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type UserOrgTags struct {
+	OrgTags       []string       `json:"orgTags"`
+	PrimaryOrg    string         `json:"primaryOrg"`
+	OrgTagDetails []OrgTagDetail `json:"orgTagDetails"`
 }
 
 func NewUserService(userRepo repo.UserRepo, tokenRepo repo.TokenRepo, orgTagRepo repo.OrgTagRepo, jwtManager *auth.JWTManager, logger *zap.Logger) *UserService {
@@ -167,6 +180,37 @@ func (s *UserService) Me(ctx context.Context, userID int64) (*model.User, error)
 	return user, nil
 }
 
+func (s *UserService) GetUserOrgTags(ctx context.Context, userID int64) (*UserOrgTags, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	orgTags := splitOrgTags(user.OrgTags)
+	tags, err := s.orgTagRepo.FindBatchByIDs(ctx, orgTags)
+	if err != nil {
+		return nil, err
+	}
+
+	details := make([]OrgTagDetail, 0, len(tags))
+	for _, tag := range tags {
+		details = append(details, OrgTagDetail{
+			TagID:       tag.TagID,
+			Name:        tag.Name,
+			Description: stringValue(tag.Description),
+		})
+	}
+
+	return &UserOrgTags{
+		OrgTags:       orgTags,
+		PrimaryOrg:    stringValue(user.PrimaryOrg),
+		OrgTagDetails: details,
+	}, nil
+}
+
 func (s *UserService) GetUserByUsername(ctx context.Context, username string) (*model.User, error) {
 	return s.userRepo.FindByUsername(ctx, username)
 }
@@ -193,4 +237,27 @@ func (s *UserService) createPrivateOrgTag(ctx context.Context, userID int64, use
 	}
 
 	return privateOrgTag, nil
+}
+
+func splitOrgTags(value *string) []string {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return []string{}
+	}
+
+	parts := strings.Split(*value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		tag := strings.TrimSpace(part)
+		if tag != "" {
+			result = append(result, tag)
+		}
+	}
+	return result
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

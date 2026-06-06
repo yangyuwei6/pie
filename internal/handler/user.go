@@ -162,6 +162,28 @@ func (h *UserHandler) Me(c *gin.Context) {
 	OK(c, toUserResponse(user))
 }
 
+func (h *UserHandler) GetUserOrgTags(c *gin.Context) {
+	userID, ok := c.Get("user_id")
+	if !ok {
+		Unauthorized(c, "missing user context")
+		return
+	}
+
+	id, ok := userID.(int64)
+	if !ok {
+		Unauthorized(c, "invalid user context")
+		return
+	}
+
+	orgTags, err := h.userService.GetUserOrgTags(c.Request.Context(), id)
+	if err != nil {
+		Fail(c, err)
+		return
+	}
+
+	OK(c, orgTags)
+}
+
 func toUserResponse(user *model.User) UserResponse {
 	return UserResponse{
 		ID:       user.ID,

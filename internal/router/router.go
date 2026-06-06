@@ -24,6 +24,7 @@ func Register(r *gin.Engine, userHandler *handler.UserHandler, jwtMiddleware gin
 		{
 			authed.GET("/me", userHandler.Me)
 			authed.POST("/logout", userHandler.Logout)
+			authed.GET("/org-tags", userHandler.GetUserOrgTags)
 		}
 	}
 }
