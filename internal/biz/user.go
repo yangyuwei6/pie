@@ -29,14 +29,16 @@ type TokenRepo interface {
 type UserUsecase struct {
 	userRepo   UserRepo
 	tokenRepo  TokenRepo
+	orgTagBiz  *OrgTagUsecase
 	jwtManager *auth.JWTManager
 	logger     *zap.Logger
 }
 
-func NewUserUsecase(userRepo UserRepo, tokenRepo TokenRepo, jwtManager *auth.JWTManager, logger *zap.Logger) *UserUsecase {
+func NewUserUsecase(userRepo UserRepo, tokenRepo TokenRepo, orgTagBiz *OrgTagUsecase, jwtManager *auth.JWTManager, logger *zap.Logger) *UserUsecase {
 	return &UserUsecase{
 		userRepo:   userRepo,
 		tokenRepo:  tokenRepo,
+		orgTagBiz:  orgTagBiz,
 		jwtManager: jwtManager,
 		logger:     logger,
 	}
@@ -65,6 +67,18 @@ func (u *UserUsecase) Register(ctx context.Context, username, password string) (
 	if err := u.userRepo.Create(ctx, user); err != nil {
 		return nil, err
 	}
+
+	privateOrgTag, err := u.orgTagBiz.CreatePrivateOrgTag(ctx, user.ID, username)
+	if err != nil {
+		return nil, err
+	}
+
+	user.OrgTags = &privateOrgTag
+	user.PrimaryOrg = &privateOrgTag
+	if err := u.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
 	return user, nil
 }
 
