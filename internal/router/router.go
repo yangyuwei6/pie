@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Register(r *gin.Engine, userHandler *handler.UserHandler, jwtMiddleware gin.HandlerFunc) {
+func Register(r *gin.Engine, userHandler *handler.UserHandler, uploadHandler *handler.UploadHandler, jwtMiddleware gin.HandlerFunc) {
 	api := r.Group("/api/v1")
 
 	auth := api.Group("/auth")
@@ -27,5 +27,11 @@ func Register(r *gin.Engine, userHandler *handler.UserHandler, jwtMiddleware gin
 			authed.GET("/org-tags", userHandler.GetUserOrgTags)
 			authed.PUT("/primary-org", userHandler.SetPrimaryOrg)
 		}
+	}
+
+	upload := api.Group("/upload")
+	upload.Use(jwtMiddleware)
+	{
+		upload.POST("/check", uploadHandler.CheckFile)
 	}
 }

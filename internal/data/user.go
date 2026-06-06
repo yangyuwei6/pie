@@ -2,17 +2,16 @@ package data
 
 import (
 	"context"
-	"go.uber.org/zap"
+
 	"pie/internal/data/model"
 )
 
 type UserRepo struct {
 	data *Data
-	log  *zap.Logger
 }
 
-func NewUserRepo(data *Data, log *zap.Logger) *UserRepo {
-	return &UserRepo{data: data, log: log}
+func NewUserRepo(data *Data) *UserRepo {
+	return &UserRepo{data: data}
 }
 
 func (r *UserRepo) Create(ctx context.Context, user *model.User) error {

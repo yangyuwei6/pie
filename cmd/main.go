@@ -45,14 +45,17 @@ func main() {
 	defer rdb.Close()
 
 	dataStore := data.NewData(db, rdb)
-	userRepo := data.NewUserRepo(dataStore, logger)
+	userRepo := data.NewUserRepo(dataStore)
 	tokenRepo := data.NewTokenRepo(dataStore)
 	orgTagRepo := data.NewOrgTagRepo(dataStore)
+	uploadRepo := data.NewUploadRepo(dataStore)
 	jwtManager := auth.NewJWTManager(cfg.JWT)
 	userService := service.NewUserService(userRepo, tokenRepo, orgTagRepo, jwtManager, logger)
+	uploadService := service.NewUploadService(uploadRepo, logger)
 	userHandler := handler.NewUserHandler(userService, logger)
+	uploadHandler := handler.NewUploadHandler(uploadService, logger)
 	jwtMiddleware := middleware.JWT(jwtManager, userService)
-	router.Register(r, userHandler, jwtMiddleware)
+	router.Register(r, userHandler, uploadHandler, jwtMiddleware)
 
 	if err := r.Run(cfg.HTTP.Addr); err != nil {
 		logger.Fatal("failed to run server", zap.Error(err))
