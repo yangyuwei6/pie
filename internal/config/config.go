@@ -36,6 +36,7 @@ type RedisConfig struct {
 
 type SearchConfig struct {
 	ElasticsearchURL string `yaml:"url"`
+	IndexName        string `yaml:"index_name"`
 }
 
 type ObjectStoreConfig struct {
@@ -57,11 +58,13 @@ type JWTConfig struct {
 }
 
 type AIConfig struct {
-	LLMBaseURL       string `yaml:"llm_base_url"`
-	LLMAPIKey        string `yaml:"llm_api_key"`
-	EmbeddingBaseURL string `yaml:"embedding_base_url"`
-	EmbeddingAPIKey  string `yaml:"embedding_api_key"`
-	TikaURL          string `yaml:"tika_url"`
+	LLMBaseURL          string `yaml:"llm_base_url"`
+	LLMAPIKey           string `yaml:"llm_api_key"`
+	EmbeddingBaseURL    string `yaml:"embedding_base_url"`
+	EmbeddingAPIKey     string `yaml:"embedding_api_key"`
+	EmbeddingModel      string `yaml:"embedding_model"`
+	EmbeddingDimensions int    `yaml:"embedding_dimensions"`
+	TikaURL             string `yaml:"tika_url"`
 }
 
 func Load() (Config, error) {
@@ -100,5 +103,14 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Messaging.Topic == "" {
 		cfg.Messaging.Topic = "file-processing"
+	}
+	if cfg.Search.IndexName == "" {
+		cfg.Search.IndexName = "knowledge_base"
+	}
+	if cfg.AI.EmbeddingModel == "" {
+		cfg.AI.EmbeddingModel = "text-embedding-v4"
+	}
+	if cfg.AI.EmbeddingDimensions == 0 {
+		cfg.AI.EmbeddingDimensions = 2048
 	}
 }
