@@ -125,3 +125,35 @@ func (h *Handler) MergeChunks(c *gin.Context) {
 
 	httpresp.OK(c, result)
 }
+
+func (h *Handler) GetUploadStatus(c *gin.Context) {
+	userID, ok := c.Get("user_id")
+	if !ok {
+		httpresp.Unauthorized(c, "missing user context")
+		return
+	}
+
+	id, ok := userID.(int64)
+	if !ok {
+		httpresp.Unauthorized(c, "invalid user context")
+		return
+	}
+
+	var req UploadStatusRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httpresp.BadRequest(c, "invalid request")
+		return
+	}
+
+	result, err := h.uploadService.GetUploadStatus(c.Request.Context(), req.FileMD5, id)
+	if err != nil {
+		httpresp.Fail(c, err)
+		return
+	}
+
+	httpresp.OK(c, result)
+}
+
+func (h *Handler) GetSupportedFileTypes(c *gin.Context) {
+	httpresp.OK(c, h.uploadService.GetSupportedFileTypes())
+}

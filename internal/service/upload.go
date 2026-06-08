@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,20 @@ type UploadChunkResult struct {
 
 type MergeChunksResult struct {
 	ObjectURL string `json:"objectUrl"`
+}
+
+type UploadStatusResult struct {
+	FileName    string  `json:"fileName"`
+	FileType    string  `json:"fileType"`
+	Uploaded    []int   `json:"uploaded"`
+	Progress    float64 `json:"progress"`
+	TotalChunks int     `json:"totalChunks"`
+}
+
+type SupportedFileTypesResult struct {
+	SupportedExtensions []string `json:"supportedExtensions"`
+	SupportedTypes      []string `json:"supportedTypes"`
+	Description         string   `json:"description"`
 }
 
 func NewUploadService(uploadRepo repo.UploadRepo, userRepo repo.UserRepo, producer FileTaskProducer, logger *zap.Logger) *UploadService {
@@ -323,6 +338,80 @@ func (s *UploadService) MergeChunks(ctx context.Context, fileMD5, fileName strin
 	}, nil
 }
 
+func (s *UploadService) GetUploadStatus(ctx context.Context, fileMD5 string, userID int64) (*UploadStatusResult, error) {
+	userIDString := strconv.FormatInt(userID, 10)
+
+	record, err := s.uploadRepo.GetFileUploadRecord(ctx, fileMD5, userIDString)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.logger.Warn("get upload status failed: upload record not found",
+				zap.String("file_md5", fileMD5),
+				zap.Int64("user_id", userID),
+			)
+			return nil, ErrUploadNotFound
+		}
+		s.logger.Error("get upload status failed: get file upload record failed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	totalChunks := calculateTotalChunks(record.TotalSize)
+	uploadedChunks, err := s.uploadRepo.GetUploadedChunks(ctx, fileMD5, userIDString, totalChunks)
+	if err != nil {
+		s.logger.Error("get upload status failed: get uploaded chunks failed",
+			zap.String("file_md5", fileMD5),
+			zap.Int64("user_id", userID),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	return &UploadStatusResult{
+		FileName:    record.FileName,
+		FileType:    getFileType(record.FileName),
+		Uploaded:    uploadedChunks,
+		Progress:    calculateProgress(uploadedChunks, totalChunks),
+		TotalChunks: totalChunks,
+	}, nil
+}
+
+func (s *UploadService) GetSupportedFileTypes() *SupportedFileTypesResult {
+	typeMapping := map[string]string{
+		".doc":  "Word document",
+		".docx": "Word document",
+		".md":   "Markdown document",
+		".pdf":  "PDF document",
+		".ppt":  "PowerPoint presentation",
+		".pptx": "PowerPoint presentation",
+		".txt":  "Text file",
+		".xls":  "Excel spreadsheet",
+		".xlsx": "Excel spreadsheet",
+	}
+
+	extensions := make([]string, 0, len(typeMapping))
+	typeSet := make(map[string]struct{})
+	for ext, fileType := range typeMapping {
+		extensions = append(extensions, ext)
+		typeSet[fileType] = struct{}{}
+	}
+	sort.Strings(extensions)
+
+	fileTypes := make([]string, 0, len(typeSet))
+	for fileType := range typeSet {
+		fileTypes = append(fileTypes, fileType)
+	}
+	sort.Strings(fileTypes)
+
+	return &SupportedFileTypesResult{
+		SupportedExtensions: extensions,
+		SupportedTypes:      fileTypes,
+		Description:         "Supported document types can be parsed and indexed for retrieval.",
+	}
+}
+
 func (s *UploadService) createFileUploadRecord(ctx context.Context, fileMD5, fileName string, totalSize int64, userID int64, userIDString string, orgTag string, isPublic bool) (*model.FileUpload, error) {
 	if orgTag == "" {
 		user, err := s.userRepo.FindByID(ctx, userID)
@@ -381,6 +470,36 @@ func isSupportedFileType(fileName string) bool {
 		}
 	}
 	return false
+}
+
+func getFileType(fileName string) string {
+	ext := fileExtension(fileName)
+	switch ext {
+	case ".pdf":
+		return "PDF document"
+	case ".doc", ".docx":
+		return "Word document"
+	case ".xls", ".xlsx":
+		return "Excel spreadsheet"
+	case ".ppt", ".pptx":
+		return "PowerPoint presentation"
+	case ".txt":
+		return "Text file"
+	case ".md":
+		return "Markdown document"
+	case "":
+		return "Unknown file"
+	default:
+		return strings.ToUpper(strings.TrimPrefix(ext, ".")) + " file"
+	}
+}
+
+func fileExtension(fileName string) string {
+	index := strings.LastIndex(fileName, ".")
+	if index < 0 || index == len(fileName)-1 {
+		return ""
+	}
+	return strings.ToLower(fileName[index:])
 }
 
 func stringPtrOrNil(value string) *string {

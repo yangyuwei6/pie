@@ -17,3 +17,7 @@ type MergeChunksRequest struct {
 	FileMD5  string `json:"fileMd5" binding:"required"`
 	FileName string `json:"fileName" binding:"required"`
 }
+
+type UploadStatusRequest struct {
+	FileMD5 string `form:"file_md5" binding:"required"`
+}

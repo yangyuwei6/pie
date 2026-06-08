@@ -36,5 +36,7 @@ func Register(r *gin.Engine, userHandler *userhandler.Handler, uploadHandler *up
 		upload.POST("/check", uploadHandler.CheckFile)
 		upload.POST("/chunk", uploadHandler.UploadChunk)
 		upload.POST("/merge", uploadHandler.MergeChunks)
+		upload.GET("/status", uploadHandler.GetUploadStatus)
+		upload.GET("/supported-types", uploadHandler.GetSupportedFileTypes)
 	}
 }
