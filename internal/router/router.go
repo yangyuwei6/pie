@@ -1,13 +1,14 @@
 package router
 
 import (
+	searchhandler "pie/internal/handler/search"
 	uploadhandler "pie/internal/handler/upload"
 	userhandler "pie/internal/handler/user"
 
 	"github.com/gin-gonic/gin"
 )
 
-func Register(r *gin.Engine, userHandler *userhandler.Handler, uploadHandler *uploadhandler.Handler, jwtMiddleware gin.HandlerFunc) {
+func Register(r *gin.Engine, userHandler *userhandler.Handler, uploadHandler *uploadhandler.Handler, searchHandler *searchhandler.Handler, jwtMiddleware gin.HandlerFunc) {
 	api := r.Group("/api/v1")
 
 	auth := api.Group("/auth")
@@ -38,5 +39,11 @@ func Register(r *gin.Engine, userHandler *userhandler.Handler, uploadHandler *up
 		upload.POST("/merge", uploadHandler.MergeChunks)
 		upload.GET("/status", uploadHandler.GetUploadStatus)
 		upload.GET("/supported-types", uploadHandler.GetSupportedFileTypes)
+	}
+
+	search := api.Group("/search")
+	search.Use(jwtMiddleware)
+	{
+		search.GET("/hybrid", searchHandler.HybridSearch)
 	}
 }

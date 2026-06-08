@@ -134,6 +134,15 @@ func (r *UploadRepo) DeleteUploadMark(ctx context.Context, fileMD5 string, userI
 	return r.data.rdb.Del(ctx, key).Err()
 }
 
+func (r *UploadRepo) FindBatchByMD5s(ctx context.Context, fileMD5s []string) ([]*model.FileUpload, error) {
+	if len(fileMD5s) == 0 {
+		return []*model.FileUpload{}, nil
+	}
+
+	f := r.data.q.FileUpload
+	return f.WithContext(ctx).Where(f.FileMd5.In(fileMD5s...)).Find()
+}
+
 func uploadKey(userID string, fileMD5 string) string {
 	return fmt.Sprintf("upload:%s:%s", userID, fileMD5)
 }

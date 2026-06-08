@@ -2,12 +2,17 @@ package data
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"pie/internal/data/model"
+	"pie/internal/repo"
 
 	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/refresh"
 )
 
@@ -72,6 +77,44 @@ func (r *SearchRepo) IndexDocument(ctx context.Context, docVector *model.Documen
 	return nil
 }
 
+func (r *SearchRepo) HybridSearch(ctx context.Context, query string, queryVector []float64, topK int, userID int64, orgTags []string) ([]repo.SearchResult, error) {
+	if topK <= 0 {
+		topK = 10
+	}
+
+	normalized, phrase := normalizeQuery(query)
+	searchBody := buildHybridSearchBody(normalized, phrase, queryVector, topK, userID, orgTags)
+
+	res, err := r.data.esClient.Search().
+		Index(r.indexName).
+		Raw(searchBody).
+		TrackTotalHits(true).
+		Do(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("search elasticsearch: %w", err)
+	}
+
+	results, err := decodeSearchHits(res.Hits.Hits)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) > 0 || phrase == "" || phrase == query {
+		return results, nil
+	}
+
+	retryBody := buildHybridSearchBody(phrase, phrase, queryVector, topK, userID, orgTags)
+	retryRes, err := r.data.esClient.Search().
+		Index(r.indexName).
+		Raw(retryBody).
+		TrackTotalHits(true).
+		Do(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("retry search elasticsearch: %w", err)
+	}
+
+	return decodeSearchHits(retryRes.Hits.Hits)
+}
+
 func buildSearchDocument(docVector *model.DocumentVector, vector []float64) searchDocument {
 	userID, _ := strconv.ParseInt(docVector.UserID, 10, 64)
 	return searchDocument{
@@ -87,11 +130,126 @@ func buildSearchDocument(docVector *model.DocumentVector, vector []float64) sear
 	}
 }
 
+func buildHybridSearchBody(query string, phrase string, queryVector []float64, topK int, userID int64, orgTags []string) *strings.Reader {
+	recallK := topK * 30
+	if recallK < topK {
+		recallK = topK
+	}
+
+	body := map[string]any{
+		"knn": map[string]any{
+			"field":          "vector",
+			"query_vector":   queryVector,
+			"k":              recallK,
+			"num_candidates": recallK,
+		},
+		"query": map[string]any{
+			"bool": map[string]any{
+				"must": map[string]any{
+					"match": map[string]any{
+						"text_content": query,
+					},
+				},
+				"filter": map[string]any{
+					"bool": map[string]any{
+						"should": []map[string]any{
+							{"term": map[string]any{"user_id": userID}},
+							{"term": map[string]any{"is_public": true}},
+							{"terms": map[string]any{"org_tag": orgTags}},
+						},
+						"minimum_should_match": 1,
+					},
+				},
+				"should": buildPhraseShould(phrase),
+			},
+		},
+		"rescore": map[string]any{
+			"window_size": recallK,
+			"query": map[string]any{
+				"rescore_query": map[string]any{
+					"match": map[string]any{
+						"text_content": map[string]any{
+							"query":    query,
+							"operator": "and",
+						},
+					},
+				},
+				"query_weight":         0.2,
+				"rescore_query_weight": 1.0,
+			},
+		},
+		"size": topK,
+	}
+
+	b, _ := json.Marshal(body)
+	return strings.NewReader(string(b))
+}
+
+func decodeSearchHits(hits []types.Hit) ([]repo.SearchResult, error) {
+	results := make([]repo.SearchResult, 0, len(hits))
+	for _, hit := range hits {
+		var source searchDocument
+		if err := json.Unmarshal(hit.Source_, &source); err != nil {
+			return nil, fmt.Errorf("decode search hit source: %w", err)
+		}
+
+		score := 0.0
+		if hit.Score_ != nil {
+			score = float64(*hit.Score_)
+		}
+
+		results = append(results, repo.SearchResult{
+			FileMD5:     source.FileMD5,
+			ChunkID:     source.ChunkID,
+			TextContent: source.TextContent,
+			Score:       score,
+			UserID:      source.UserID,
+			OrgTag:      source.OrgTag,
+			IsPublic:    source.IsPublic,
+		})
+	}
+	return results, nil
+}
+
 func stringValue(value *string) string {
 	if value == nil {
 		return ""
 	}
 	return *value
+}
+
+func normalizeQuery(q string) (string, string) {
+	kept := strings.TrimSpace(strings.ToLower(q))
+	if kept == "" {
+		return q, ""
+	}
+	for _, sp := range []string{"是谁", "是什么", "是啥", "请问", "怎么", "如何", "告诉我", "严格", "按照", "不要补充", "的区别", "区别", "吗", "呢", "？", "?"} {
+		kept = strings.ReplaceAll(kept, sp, " ")
+	}
+
+	kept = regexp.MustCompile(`[^\p{Han}a-z0-9\s]+`).ReplaceAllString(kept, " ")
+	kept = regexp.MustCompile(`\s+`).ReplaceAllString(kept, " ")
+	kept = strings.TrimSpace(kept)
+	if kept == "" {
+		return q, ""
+	}
+	return kept, kept
+}
+
+func buildPhraseShould(phrase string) any {
+	if phrase == "" {
+		return nil
+	}
+	return []map[string]any{
+		{
+			"match_phrase": map[string]any{
+				"text_content": map[string]any{
+					"query": phrase,
+					"boost": 3.0,
+				},
+			},
+		},
+	}
 }
 
 const indexMapping = `{

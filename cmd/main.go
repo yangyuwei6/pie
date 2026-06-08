@@ -7,6 +7,7 @@ import (
 	"pie/internal/config"
 	"pie/internal/data"
 	"pie/internal/embedding"
+	searchhandler "pie/internal/handler/search"
 	uploadhandler "pie/internal/handler/upload"
 	userhandler "pie/internal/handler/user"
 	"pie/internal/log"
@@ -74,13 +75,15 @@ func main() {
 	jwtManager := auth.NewJWTManager(cfg.JWT)
 	userService := service.NewUserService(userRepo, tokenRepo, orgTagRepo, jwtManager, logger)
 	uploadService := service.NewUploadService(uploadRepo, userRepo, fileTaskProducer, logger)
-	userHandler := userhandler.NewHandler(userService, logger)
-	uploadHandler := uploadhandler.NewHandler(uploadService, logger)
-	jwtMiddleware := middleware.JWT(jwtManager, userService)
-	router.Register(r, userHandler, uploadHandler, jwtMiddleware)
-
 	tikaClient := tika.NewClient(cfg.AI.TikaURL)
 	embeddingClient := embedding.NewClient(cfg.AI)
+	searchService := service.NewSearchService(searchRepo, uploadRepo, userRepo, embeddingClient, logger)
+	userHandler := userhandler.NewHandler(userService, logger)
+	uploadHandler := uploadhandler.NewHandler(uploadService, logger)
+	searchHandler := searchhandler.NewHandler(searchService, logger)
+	jwtMiddleware := middleware.JWT(jwtManager, userService)
+	router.Register(r, userHandler, uploadHandler, searchHandler, jwtMiddleware)
+
 	if err := searchRepo.EnsureIndex(context.Background()); err != nil {
 		logger.Warn("ensure elasticsearch index failed", zap.Error(err))
 	}

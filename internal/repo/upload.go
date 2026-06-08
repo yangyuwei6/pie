@@ -21,4 +21,5 @@ type UploadRepo interface {
 	GetPresignedURL(ctx context.Context, objectName string, expiry time.Duration) (string, error)
 	UpdateFileUploadStatus(ctx context.Context, recordID int64, status int32) error
 	DeleteUploadMark(ctx context.Context, fileMD5 string, userID string) error
+	FindBatchByMD5s(ctx context.Context, fileMD5s []string) ([]*model.FileUpload, error)
 }
