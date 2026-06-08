@@ -14,7 +14,6 @@ import (
 	"pie/internal/middleware"
 	"pie/internal/pipeline"
 	"pie/internal/router"
-	searches "pie/internal/search/es"
 	"pie/internal/service"
 	"pie/internal/tika"
 
@@ -57,15 +56,21 @@ func main() {
 		logger.Fatal("init minio failed", zap.Error(err))
 	}
 
-	dataStore := data.NewData(db, rdb, minioClient, cfg.ObjectStore.Bucket)
+	esClient, err := data.NewElasticsearch(cfg.Search)
+	if err != nil {
+		logger.Fatal("init elasticsearch failed", zap.Error(err))
+	}
+
+	dataStore := data.NewData(db, rdb, minioClient, esClient)
 	fileTaskProducer := kafkamessaging.NewProducer(cfg.Messaging)
 	defer fileTaskProducer.Close()
 
 	userRepo := data.NewUserRepo(dataStore)
 	tokenRepo := data.NewTokenRepo(dataStore)
 	orgTagRepo := data.NewOrgTagRepo(dataStore)
-	uploadRepo := data.NewUploadRepo(dataStore)
+	uploadRepo := data.NewUploadRepo(dataStore, cfg.ObjectStore.Bucket)
 	documentVectorRepo := data.NewDocumentVectorRepo(dataStore)
+	searchRepo := data.NewSearchRepo(dataStore, cfg.Search.IndexName)
 	jwtManager := auth.NewJWTManager(cfg.JWT)
 	userService := service.NewUserService(userRepo, tokenRepo, orgTagRepo, jwtManager, logger)
 	uploadService := service.NewUploadService(uploadRepo, userRepo, fileTaskProducer, logger)
@@ -76,8 +81,7 @@ func main() {
 
 	tikaClient := tika.NewClient(cfg.AI.TikaURL)
 	embeddingClient := embedding.NewClient(cfg.AI)
-	searchIndexer := searches.NewIndexer(cfg.Search)
-	if err := searchIndexer.EnsureIndex(context.Background()); err != nil {
+	if err := searchRepo.EnsureIndex(context.Background()); err != nil {
 		logger.Warn("ensure elasticsearch index failed", zap.Error(err))
 	}
 	processor := pipeline.NewProcessor(
@@ -85,7 +89,7 @@ func main() {
 		documentVectorRepo,
 		tikaClient,
 		embeddingClient,
-		searchIndexer,
+		searchRepo,
 		logger,
 	)
 	consumer := kafkamessaging.NewConsumer(cfg.Messaging, processor, logger)

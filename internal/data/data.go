@@ -2,11 +2,14 @@ package data
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 
 	"pie/internal/config"
 	"pie/internal/data/query"
 
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
@@ -18,7 +21,7 @@ type Data struct {
 	q           *query.Query
 	rdb         *redis.Client
 	minioClient *minio.Client
-	minioBucket string
+	esClient    *elasticsearch.TypedClient
 }
 
 func NewDB(cfg config.MySQLConfig) (*gorm.DB, error) {
@@ -65,11 +68,24 @@ func NewMinIO(cfg config.ObjectStoreConfig) (*minio.Client, error) {
 	return client, nil
 }
 
-func NewData(db *gorm.DB, rdb *redis.Client, minioClient *minio.Client, minioBucket string) *Data {
+func NewElasticsearch(cfg config.SearchConfig) (*elasticsearch.TypedClient, error) {
+	client, err := elasticsearch.NewTypedClient(elasticsearch.Config{
+		Addresses: []string{cfg.ElasticsearchURL},
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("connect elasticsearch failed: %w", err)
+	}
+	return client, nil
+}
+
+func NewData(db *gorm.DB, rdb *redis.Client, minioClient *minio.Client, esClient *elasticsearch.TypedClient) *Data {
 	return &Data{
 		q:           query.Use(db),
 		rdb:         rdb,
 		minioClient: minioClient,
-		minioBucket: minioBucket,
+		esClient:    esClient,
 	}
 }

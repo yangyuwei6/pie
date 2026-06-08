@@ -30,29 +30,13 @@ type EmbeddingClient interface {
 	Model() string
 }
 
-type SearchIndexer interface {
-	IndexDocument(ctx context.Context, doc SearchDocument) error
-}
-
-type SearchDocument struct {
-	VectorID     string    `json:"vector_id"`
-	FileMD5      string    `json:"file_md5"`
-	ChunkID      int32     `json:"chunk_id"`
-	TextContent  string    `json:"text_content"`
-	Vector       []float64 `json:"vector"`
-	ModelVersion string    `json:"model_version"`
-	UserID       int64     `json:"user_id"`
-	OrgTag       string    `json:"org_tag"`
-	IsPublic     bool      `json:"is_public"`
-}
-
 type Processor struct {
-	uploadRepo    repo.UploadRepo
-	vectorRepo    repo.DocumentVectorRepo
-	extractor     TextExtractor
-	embedding     EmbeddingClient
-	searchIndexer SearchIndexer
-	logger        *zap.Logger
+	uploadRepo repo.UploadRepo
+	vectorRepo repo.DocumentVectorRepo
+	extractor  TextExtractor
+	embedding  EmbeddingClient
+	searchRepo repo.SearchRepo
+	logger     *zap.Logger
 }
 
 func NewProcessor(
@@ -60,16 +44,16 @@ func NewProcessor(
 	vectorRepo repo.DocumentVectorRepo,
 	extractor TextExtractor,
 	embedding EmbeddingClient,
-	searchIndexer SearchIndexer,
+	searchRepo repo.SearchRepo,
 	logger *zap.Logger,
 ) *Processor {
 	return &Processor{
-		uploadRepo:    uploadRepo,
-		vectorRepo:    vectorRepo,
-		extractor:     extractor,
-		embedding:     embedding,
-		searchIndexer: searchIndexer,
-		logger:        logger,
+		uploadRepo: uploadRepo,
+		vectorRepo: vectorRepo,
+		extractor:  extractor,
+		embedding:  embedding,
+		searchRepo: searchRepo,
+		logger:     logger,
 	}
 }
 
@@ -177,19 +161,7 @@ func (p *Processor) Process(ctx context.Context, task message.FileProcessing) er
 			return fmt.Errorf("create embedding for chunk %d: %w", docVector.ChunkID, err)
 		}
 
-		searchDoc := SearchDocument{
-			VectorID:     fmt.Sprintf("%s_%d", docVector.FileMd5, docVector.ChunkID),
-			FileMD5:      docVector.FileMd5,
-			ChunkID:      docVector.ChunkID,
-			TextContent:  text,
-			Vector:       vector,
-			ModelVersion: stringValue(docVector.ModelVersion),
-			UserID:       task.UserID,
-			OrgTag:       stringValue(docVector.OrgTag),
-			IsPublic:     docVector.IsPublic,
-		}
-
-		if err := p.searchIndexer.IndexDocument(ctx, searchDoc); err != nil {
+		if err := p.searchRepo.IndexDocument(ctx, docVector, vector); err != nil {
 			p.logger.Error("process file failed: index search document failed",
 				zap.String("file_md5", task.FileMD5),
 				zap.Int32("chunk_id", docVector.ChunkID),

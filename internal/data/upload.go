@@ -13,11 +13,12 @@ import (
 )
 
 type UploadRepo struct {
-	data *Data
+	data   *Data
+	bucket string
 }
 
-func NewUploadRepo(data *Data) *UploadRepo {
-	return &UploadRepo{data: data}
+func NewUploadRepo(data *Data, bucket string) *UploadRepo {
+	return &UploadRepo{data: data, bucket: bucket}
 }
 
 func (r *UploadRepo) GetFileUploadRecord(ctx context.Context, fileMD5 string, userID string) (*model.FileUpload, error) {
@@ -75,12 +76,12 @@ func (r *UploadRepo) GetUploadedChunks(ctx context.Context, fileMD5 string, user
 }
 
 func (r *UploadRepo) SaveChunk(ctx context.Context, objectName string, reader io.Reader, size int64) error {
-	_, err := r.data.minioClient.PutObject(ctx, r.data.minioBucket, objectName, reader, size, minio.PutObjectOptions{})
+	_, err := r.data.minioClient.PutObject(ctx, r.bucket, objectName, reader, size, minio.PutObjectOptions{})
 	return err
 }
 
 func (r *UploadRepo) GetObject(ctx context.Context, objectName string) (io.ReadCloser, error) {
-	return r.data.minioClient.GetObject(ctx, r.data.minioBucket, objectName, minio.GetObjectOptions{})
+	return r.data.minioClient.GetObject(ctx, r.bucket, objectName, minio.GetObjectOptions{})
 }
 
 func (r *UploadRepo) MergeChunks(ctx context.Context, sourceObjects []string, destObject string) error {
@@ -89,13 +90,13 @@ func (r *UploadRepo) MergeChunks(ctx context.Context, sourceObjects []string, de
 	}
 
 	dst := minio.CopyDestOptions{
-		Bucket: r.data.minioBucket,
+		Bucket: r.bucket,
 		Object: destObject,
 	}
 
 	if len(sourceObjects) == 1 {
 		src := minio.CopySrcOptions{
-			Bucket: r.data.minioBucket,
+			Bucket: r.bucket,
 			Object: sourceObjects[0],
 		}
 		_, err := r.data.minioClient.CopyObject(ctx, dst, src)
@@ -105,7 +106,7 @@ func (r *UploadRepo) MergeChunks(ctx context.Context, sourceObjects []string, de
 	srcs := make([]minio.CopySrcOptions, 0, len(sourceObjects))
 	for _, objectName := range sourceObjects {
 		srcs = append(srcs, minio.CopySrcOptions{
-			Bucket: r.data.minioBucket,
+			Bucket: r.bucket,
 			Object: objectName,
 		})
 	}
@@ -115,7 +116,7 @@ func (r *UploadRepo) MergeChunks(ctx context.Context, sourceObjects []string, de
 }
 
 func (r *UploadRepo) GetPresignedURL(ctx context.Context, objectName string, expiry time.Duration) (string, error) {
-	u, err := r.data.minioClient.PresignedGetObject(ctx, r.data.minioBucket, objectName, expiry, nil)
+	u, err := r.data.minioClient.PresignedGetObject(ctx, r.bucket, objectName, expiry, nil)
 	if err != nil {
 		return "", err
 	}
