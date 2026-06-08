@@ -79,6 +79,10 @@ func (r *UploadRepo) SaveChunk(ctx context.Context, objectName string, reader io
 	return err
 }
 
+func (r *UploadRepo) GetObject(ctx context.Context, objectName string) (io.ReadCloser, error) {
+	return r.data.minioClient.GetObject(ctx, r.data.minioBucket, objectName, minio.GetObjectOptions{})
+}
+
 func (r *UploadRepo) MergeChunks(ctx context.Context, sourceObjects []string, destObject string) error {
 	if len(sourceObjects) == 0 {
 		return fmt.Errorf("source objects is empty")
